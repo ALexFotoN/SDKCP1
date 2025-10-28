@@ -1,0 +1,25 @@
+public class GameManager : MonoBehaviour
+{
+    public RemoteConfigLoader configLoader;
+    private List<weapon> weapons;
+
+Копировать код
+
+void Start()
+{
+    // укажите URL вашего CSV или JSON
+    string url = "https://.../config.csv";
+    configLoader = new RemoteConfigLoader(url, "csv"); // или "json"
+    configLoader.OnConfigLoaded += OnConfigLoaded;
+    configLoader.LoadConfig();
+}
+
+void OnConfigLoaded(List&lt;weapon&gt; loadedWeapons)
+{
+    weapons = loadedWeapons;
+    // применяйте к вашему игровому механизму, например:
+    foreach (var w in weapons)
+    {
+        Debug.Log($"Weapon {w.id}: damage={w.damage}, cooldown={w.cooldown}");
+    }
+}
