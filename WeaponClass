@@ -1,0 +1,158 @@
+public class Weapon
+{
+public string id;
+public int damage;
+public float cooldown;
+}
+RemoteConfigLoader
+public class RemoteConfigLoader
+{
+private string configUrl;
+private string localFileName = "remote_config.csv"; // или .json в зависимости от формата
+private string format; // "csv" или "json"
+
+public Action<list<weapon>> OnConfigLoaded; // событие после загрузки
+
+public RemoteConfigLoader(string url, string format)
+{
+    this.configUrl = url;
+    this.format = format.ToLower();
+}
+
+public void LoadConfig()
+{
+    // 1) Попытаться скачать по URL
+    // 2) Если успех — распарсить
+    // 3) В случае ошибки — попытаться загрузить локальную копию
+    // 4) Если локальной копии нет — применить дефолтные значения и залогировать
+}
+
+private IEnumerator DownloadAndParse()
+{
+    using (UnityWebRequest www = (format == "csv")
+        ? UnityWebRequest.Get(configUrl)
+        : UnityWebRequest.Get(configUrl)) // JSON тоже через Get
+    {
+        yield return www.SendWebRequest();
+
+        if (www.result == UnityWebRequest.Result.Success)
+        {
+            string content = www.downloadHandler.text;
+            List<weapon> weapons = null;
+            if (format == "csv")
+                weapons = ParseCsv(content);
+            else
+                weapons = ParseJson(content);
+
+            if (ValidateWeapons(weapons))
+            {
+                SaveLocalCopy(content);
+                OnConfigLoaded?.Invoke(weapons);
+                yield break;
+            }
+            else
+            {
+                Debug.LogError("Validation failed for remote config.");
+            }
+        }
+        else
+        {
+            Debug.LogError("Remote config load failed: " + www.error);
+        }
+    }
+
+    // Попытка загрузить локальную копию
+    string localContent = LoadLocalCopy();
+    if (!string.IsNullOrEmpty(localContent))
+    {
+        List<weapon> localWeapons = (format == "csv")
+            ? ParseCsv(localContent)
+            : ParseJson(localContent);
+        if (ValidateWeapons(localWeapons))
+        {
+            OnConfigLoaded?.Invoke(localWeapons);
+            yield break;
+        }
+        else
+        {
+            Debug.LogError("Local copy failed validation.");
+        }
+    }
+
+    // Наконец дефолт
+    List<weapon> defaultWeapons = GetDefaultWeapons();
+    OnConfigLoaded?.Invoke(defaultWeapons);
+    Debug.LogWarning("Using default config due to errors.");
+}
+
+private List<weapon> ParseCsv(string csv)
+{
+    var list = new List<weapon>();
+    using (var reader = new StringReader(csv))
+    {
+        string header = reader.ReadLine(); // пропустим заголовок
+        while (true)
+        {
+            string line = reader.ReadLine();
+            if (string.IsNullOrWhiteSpace(line)) break;
+            var parts = line.Split(',');
+            if (parts.Length >= 3)
+            {
+                var w = new Weapon
+                {
+                    id = parts[0],
+                    damage = int.Parse(parts[1]),
+                    cooldown = float.Parse(parts[2])
+                };
+                list.Add(w);
+            }
+        }
+    }
+    return list;
+}
+
+private List<weapon> ParseJson(string json)
+{
+    // ожидаем массив объектов [{"id":"...", "damage":.., "cooldown":..}, ...]
+    return JsonUtility.FromJson<weaponarraywrapper>("{&quot;items&quot;:" + json + "}").items;
+}
+
+[System.Serializable]
+private class WeaponArrayWrapper { public List<weapon> items; }
+
+private bool ValidateWeapons(List<weapon> weapons)
+{
+    if (weapons == null) return false;
+    foreach (var w in weapons)
+    {
+        if (w == null) return false;
+        if (w.damage < 0) return false;
+        if (w.cooldown <= 0) return false;
+        if (string.IsNullOrEmpty(w.id)) return false;
+    }
+    return true;
+}
+
+private void SaveLocalCopy(string content)
+{
+    string path = Path.Combine(Application.persistentDataPath, localFileName);
+    File.WriteAllText(path, content);
+}
+
+private string LoadLocalCopy()
+{
+    string path = Path.Combine(Application.persistentDataPath, localFileName);
+    if (File.Exists(path))
+        return File.ReadAllText(path);
+    return null;
+}
+
+private List<weapon> GetDefaultWeapons()
+{
+    return new List<weapon>
+    {
+        new Weapon { id = "default_sword", damage = 10, cooldown = 1.0f },
+        new Weapon { id = "default_bow", damage = 6, cooldown = 0.9f }
+    };
+}
+}
